@@ -10,17 +10,16 @@
     "@typechain/ethers-v6": "^0.5.0",
     "@typechain/hardhat": "^9.0.0",
     "chai": "^4.2.0",
-    "ethers": "^6.13.4",
+    "dotenv": "^16.4.7",
     "hardhat": "^2.22.17",
+    "hardhat-ethers": "^1.0.1",
     "hardhat-gas-reporter": "^1.0.8",
     "solidity-coverage": "^0.8.0",
     "typechain": "^8.3.0"
   },
   "dependencies": {
     "@aave/protocol-v2": "^1.0.1",
-    "@nomiclabs/hardhat-ethers": "^2.2.3",
     "@openzeppelin/contracts": "^5.1.0",
-    "dotenv": "^16.4.7",
     "web3": "^4.16.0"
   }
 }
