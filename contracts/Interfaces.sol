@@ -12,19 +12,32 @@ interface ILendingPool {
 }
 
 interface IUniswapV2Router02 {
+    function WETH() external pure returns (address);
+    
+    function getAmountsOut(uint amountIn, address[] calldata path) 
+        external 
+        view 
+        returns (uint[] memory amounts);
+        
     function swapExactTokensForTokens(
-        uint256 amountIn,
-        uint256 amountOutMin,
+        uint amountIn,
+        uint amountOutMin,
         address[] calldata path,
         address to,
-        uint256 deadline
-    ) external returns (uint256[] memory amounts);
+        uint deadline
+    ) external returns (uint[] memory amounts);
+    }
+
+interface IERC20 {
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function allowance(address owner, address spender) external view returns (uint256);
+    function approve(address spender, uint256 amount) external returns (bool);
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
     
-    function WETH() external pure returns (address);
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
 }
 
-// Interface for ERC-20 tokens
-interface IERC20 {
-    function balanceOf(address account) external view returns (uint256);
-    function approve(address spender, uint256 amount) external returns (bool);
-}
+

@@ -1,12 +1,23 @@
-const { ethers } = require("hardhat");
+// Day 4: Initiating Flashloan
+const hre = require("hardhat");
 
-async function startFlashloan(contractAddress, token, amount) {
-    const arbitrage = await ethers.getContractAt("Arbitrage", contractAddress);
+async function main() {
+    const [deployer] = await hre.ethers.getSigners();
+    const arbitrageAddress = "Your_Arbitrage_Contract_Address"; // Replace with deployed contract address
+    const Arbitrage = await hre.ethers.getContractAt("Arbitrage", arbitrageAddress);
 
-    await arbitrage.startFlashloan(token, ethers.utils.parseEther(amount));
-    console.log("Flashloan started for", amount, "of token", token);
+    // WETH token address and loan amount
+    const token = "0xC02aaA39b223FE8D0A0E5C4F27eAD9083C756Cc2"; // WETH
+    const amount = hre.ethers.utils.parseUnits("1", 18); // 1 WETH
+
+    const tx = await Arbitrage.startFlashloan(token, amount);
+    console.log("Flashloan initiated:", tx.hash);
+
+    const receipt = await tx.wait();
+    console.log("Transaction receipt:", receipt);
 }
 
-startFlashloan("0xContractAddress", "0xTokenAddress", "1000").catch((err) =>
-    console.error(err)
-);
+main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+});
