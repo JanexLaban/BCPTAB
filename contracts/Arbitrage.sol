@@ -13,7 +13,7 @@ contract Arbitrage {
     address public router2;
     address[] public tokens; // Dynamic token array for path selection
 
-    // Constructor to initialize contract variables
+    // Day 1: Constructor to initialize contract variables
     constructor(address _lendingPool, address _router1, address _router2, address[] memory _tokens) {
         lendingPool = _lendingPool;
         router1 = _router1;
@@ -23,6 +23,7 @@ contract Arbitrage {
 
     // Day 3: Starting the Flashloan
     function startFlashloan(address token, uint256 amount) external {
+        // Day 4: Validate profitability before starting the flashloan
         int256 profit = analyzeProfit(amount, token);
         require(profit > 0, "Unprofitable arbitrage");
 
@@ -46,12 +47,14 @@ contract Arbitrage {
         string memory operation = abi.decode(params, (string));
 
         if (keccak256(bytes(operation)) == keccak256(bytes("triangular_arbitrage"))) {
+            // Day 4: Track initial balance
             uint256 balanceBefore = IERC20(asset).balanceOf(address(this));
             
             // Execute swaps on both routers
             swap(router1, asset, amount / 2);
             swap(router2, asset, amount / 2);
 
+            // Day 4: Validate profit after swaps
             uint256 balanceAfter = IERC20(asset).balanceOf(address(this));
             require(balanceAfter > balanceBefore + premium, "No profit");
         }
@@ -65,7 +68,7 @@ contract Arbitrage {
     function swap(address router, address token, uint256 amount) internal {
         IERC20(token).approve(router, amount);
 
-        // Dynamic path selection using random token
+        // Day 4: Dynamic path selection using random token
         address[] memory path = new address[](2);
         path[0] = token;
         path[1] = tokens[block.timestamp % tokens.length]; // Random token selection
@@ -82,9 +85,15 @@ contract Arbitrage {
 
     // Day 4: Profit Analysis
     function analyzeProfit(uint256 amount, address token) internal view returns (int256) {
+        // Retrieve the starting balance
         uint256 startBalance = Utils.getBalance(token, address(this));
-        uint256 estimatedOutput = getEstimatedOutput(router1, token, amount);
-        return Utils.calculateProfit(startBalance, startBalance + estimatedOutput);
+
+        // Estimate the output from both routers
+        uint256 estimatedOutput1 = getEstimatedOutput(router1, token, amount / 2);
+        uint256 estimatedOutput2 = getEstimatedOutput(router2, token, amount / 2);
+
+        // Calculate and return profit
+        return Utils.calculateProfit(startBalance, startBalance + estimatedOutput1 + estimatedOutput2);
     }
 
     // Get estimated output for swapping tokens
