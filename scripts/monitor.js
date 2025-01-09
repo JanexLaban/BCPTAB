@@ -3,11 +3,21 @@ const { ethers } = require("hardhat");
 const chalk = require("chalk"); // Add this to your package.json if not present
 
 // Configuration - replace with your deployed contract address
-const ARBITRAGE_ADDRESS = "YOUR_DEPLOYED_CONTRACT_ADDRESS";
+const ARBITRAGE_ADDRESS = "0x1bddf2572d7084cc9e13f101b6a4f8d6694e2e0c2cddf41ef11d15c01669c34c";
 const TOKENS = {
     "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599": "WBTC",
     "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2": "WETH",
     "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48": "USDC"
+};
+
+const formatAmount = (amount, token) => {
+    const decimals = {
+        "WBTC": 8,
+        "WETH": 18,
+        "USDC": 6
+    };
+    const tokenSymbol = TOKENS[token] || "WETH";
+    return ethers.formatUnits(amount, decimals[tokenSymbol] || 18);
 };
 
 async function monitorArbitrage() {
@@ -25,8 +35,8 @@ async function monitorArbitrage() {
         (token, amount, timestamp, expectedProfit) => {
         console.log(chalk.yellow("\n⚡ Flashloan Initiated:"));
         console.log(`Token: ${TOKENS[token] || token}`);
-        console.log(`Amount: ${ethers.formatEther(amount)} ETH`);
-        console.log(`Expected Profit: ${ethers.formatEther(expectedProfit)} ETH`);
+        console.log(`Amount: ${formatAmount(amount, token)}`);
+        console.log(`Expected Profit: ${formatAmount(expectedProfit, token)}`);
         console.log(`Time: ${new Date(Number(timestamp) * 1000).toLocaleString()}`);
     });
 
@@ -115,3 +125,12 @@ async function startMonitoring() {
 
 // Run the monitor
 startMonitoring().catch(console.error);
+// Add this function at the bottom of your monitor.js
+async function testConnection() {
+    const arbitrage = await ethers.getContractAt("Arbitrage", ARBITRAGE_ADDRESS);
+    const stats = await arbitrage.getStats();
+    console.log("Connection test successful:", stats);
+}
+
+// Run this before starting the monitor
+await testConnection();
