@@ -1,41 +1,132 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-// Day 1: Interfaces and Utilities
 import "./Interfaces.sol";
-import "./Utils.sol"; // Utility library for balance and profit calculations
+import "./Utils.sol";
 
-// Day 2: Core Contract Implementation
 contract Arbitrage {
-    // Addresses for LendingPool and Routers
     address public lendingPool;
     address public router1;
     address public router2;
-    address[] public tokens; // Dynamic token array for path selection
+    address[] public tokens;
+    uint256 public profitThreshold;
 
-    // Day 1: Constructor to initialize contract variables
-    constructor(address _lendingPool, address _router1, address _router2, address[] memory _tokens) {
+    // New state variables for monitoring
+    bool public isSearching;
+    uint256 public lastSearchTimestamp;
+    uint256 public totalFlashLoansInitiated;
+    uint256 public totalProfitableSwaps;
+    uint256 public totalFailedSwaps;
+    mapping(address => uint256) public tokenProfits;
+
+    // Enhanced events for better monitoring
+    event FlashloanInitiated(
+        address token,
+        uint256 amount,
+        uint256 timestamp,
+        uint256 expectedProfit
+    );
+    event SwapExecuted(
+        address router,
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn,
+        uint256 amountOut,
+        uint256 timestamp
+    );
+    event ArbitrageCompleted(
+        uint256 profit,
+        uint256 gasUsed,
+        bool successful,
+        uint256 timestamp
+    );
+    event FlashloanRepaid(
+        address token,
+        uint256 amount,
+        uint256 premium,
+        uint256 timestamp
+    );
+    event OpportunityFound(
+        address token,
+        int256 expectedProfit,
+        uint256 timestamp
+    );
+    event OpportunityNotProfitable(
+        address token,
+        int256 expectedProfit,
+        uint256 requiredProfit,
+        uint256 timestamp
+    );
+    event SearchStarted(uint256 timestamp);
+    event SearchCompleted(uint256 timestamp, bool foundOpportunity);
+
+    constructor(
+        address _lendingPool,
+        address _router1,
+        address _router2,
+        address[] memory _tokens,
+        uint256 _profitThreshold
+    ) {
         lendingPool = _lendingPool;
         router1 = _router1;
         router2 = _router2;
-        tokens = _tokens; // Tokens array for swapping paths
+        tokens = _tokens;
+        profitThreshold = _profitThreshold;
+        isSearching = false;
     }
 
-    // Day 3: Starting the Flashloan
     function startFlashloan(address token, uint256 amount) external {
-        // Day 4: Validate profitability before starting the flashloan
-        int256 profit = analyzeProfit(amount, token);
-        require(profit > 0, "Unprofitable arbitrage");
+        emit SearchStarted(block.timestamp);
+        isSearching = true;
+        lastSearchTimestamp = block.timestamp;
+        
+        int256 maxProfit = 0;
+        address bestToken = token;
+        bool foundOpportunity = false;
+
+        for (uint256 i = 0; i < tokens.length; i++) {
+            int256 profit = analyzeProfit(amount, tokens[i]);
+            
+            if (profit > maxProfit) {
+                maxProfit = profit;
+                bestToken = tokens[i];
+                foundOpportunity = true;
+                emit OpportunityFound(tokens[i], profit, block.timestamp);
+            } else {
+                emit OpportunityNotProfitable(
+                    tokens[i],
+                    profit,
+                    profitThreshold,
+                    block.timestamp
+                );
+            }
+        }
+
+        require(
+            maxProfit >= int256((profitThreshold * amount) / 100),
+            "No profitable opportunities"
+        );
+
+        totalFlashLoansInitiated++;
+        
+        emit FlashloanInitiated(
+            bestToken,
+            amount,
+            block.timestamp,
+            uint256(maxProfit)
+        );
 
         ILendingPool(lendingPool).flashLoan(
             address(this),
-            token,
+            bestToken,
             amount,
             abi.encode("triangular_arbitrage")
         );
+        
+        emit SearchCompleted(block.timestamp, foundOpportunity);
+        isSearching = false;
     }
 
-    // Callback function for flashloan execution
     function executeOperation(
         address asset,
         uint256 amount,
@@ -43,60 +134,93 @@ contract Arbitrage {
         bytes calldata params
     ) external returns (bool) {
         require(msg.sender == lendingPool, "Unauthorized");
+        uint256 startGas = gasleft();
 
         string memory operation = abi.decode(params, (string));
+        bool successful = false;
 
         if (keccak256(bytes(operation)) == keccak256(bytes("triangular_arbitrage"))) {
-            // Day 4: Track initial balance
             uint256 balanceBefore = IERC20(asset).balanceOf(address(this));
             
-            // Execute swaps on both routers
-            swap(router1, asset, amount / 2);
-            swap(router2, asset, amount / 2);
-
-            // Day 4: Validate profit after swaps
-            uint256 balanceAfter = IERC20(asset).balanceOf(address(this));
-            require(balanceAfter > balanceBefore + premium, "No profit");
+            try this.executeSwaps(asset, amount) {
+                uint256 balanceAfter = IERC20(asset).balanceOf(address(this));
+                if (balanceAfter > balanceBefore + premium) {
+                    uint256 profit = balanceAfter - balanceBefore - premium;
+                    tokenProfits[asset] += profit;
+                    totalProfitableSwaps++;
+                    successful = true;
+                    emit ArbitrageCompleted(
+                        profit,
+                        startGas - gasleft(),
+                        true,
+                        block.timestamp
+                    );
+                } else {
+                    totalFailedSwaps++;
+                    emit ArbitrageCompleted(
+                        0,
+                        startGas - gasleft(),
+                        false,
+                        block.timestamp
+                    );
+                }
+            } catch {
+                totalFailedSwaps++;
+                emit ArbitrageCompleted(
+                    0,
+                    startGas - gasleft(),
+                    false,
+                    block.timestamp
+                );
+            }
         }
 
-        // Repay the flashloan
         IERC20(asset).approve(lendingPool, amount + premium);
+        emit FlashloanRepaid(asset, amount, premium, block.timestamp);
         return true;
     }
 
-    // Internal function to execute a token swap
+    // Separated swap execution for better error handling
+    function executeSwaps(address asset, uint256 amount) external {
+        require(msg.sender == address(this), "Only self-call");
+        swap(router1, asset, amount / 2);
+        swap(router2, asset, amount / 2);
+    }
+
     function swap(address router, address token, uint256 amount) internal {
         IERC20(token).approve(router, amount);
 
-        // Day 4: Dynamic path selection using random token
         address[] memory path = new address[](2);
         path[0] = token;
-        path[1] = tokens[block.timestamp % tokens.length]; // Random token selection
+        path[1] = tokens[block.timestamp % tokens.length];
 
-        // Perform the swap
-        IUniswapV2Router02(router).swapExactTokensForTokens(
+        uint256[] memory amounts = IUniswapV2Router02(router).swapExactTokensForTokens(
             amount,
             1,
             path,
             address(this),
             block.timestamp
         );
+
+        emit SwapExecuted(
+            router,
+            path[0],
+            path[1],
+            amount,
+            amounts[amounts.length - 1],
+            block.timestamp
+        );
     }
 
-    // Day 4: Profit Analysis
+    // Existing functions remain the same
     function analyzeProfit(uint256 amount, address token) internal view returns (int256) {
-        // Retrieve the starting balance
         uint256 startBalance = Utils.getBalance(token, address(this));
-
-        // Estimate the output from both routers
         uint256 estimatedOutput1 = getEstimatedOutput(router1, token, amount / 2);
         uint256 estimatedOutput2 = getEstimatedOutput(router2, token, amount / 2);
 
-        // Calculate and return profit
         return Utils.calculateProfit(startBalance, startBalance + estimatedOutput1 + estimatedOutput2);
     }
 
-    // Get estimated output for swapping tokens
     function getEstimatedOutput(address router, address token, uint256 amount) internal view returns (uint256) {
         address[] memory path = new address[](2);
         path[0] = token;
@@ -104,5 +228,30 @@ contract Arbitrage {
 
         uint256[] memory amounts = IUniswapV2Router02(router).getAmountsOut(amount, path);
         return amounts[path.length - 1];
+    }
+
+    // New monitoring functions
+    function getStats() external view returns (
+        bool _isSearching,
+        uint256 _lastSearchTimestamp,
+        uint256 _totalFlashLoans,
+        uint256 _successfulSwaps,
+        uint256 _failedSwaps
+    ) {
+        return (
+            isSearching,
+            lastSearchTimestamp,
+            totalFlashLoansInitiated,
+            totalProfitableSwaps,
+            totalFailedSwaps
+        );
+    }
+
+    function getTokenProfit(address token) external view returns (uint256) {
+        return tokenProfits[token];
+    }
+
+    function setProfitThreshold(uint256 _profitThreshold) external {
+        profitThreshold = _profitThreshold;
     }
 }

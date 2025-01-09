@@ -29,7 +29,11 @@ module.exports = {
       url: SEPOLIA_RPC_URL,
       accounts: [PRIVATE_KEY],
       gasPrice: "auto",
+      hainId: 11155111, // Adding explicit chainId for Sepolia
+      timeout: 20000,   // Increasing timeout
       gas: 3000000,
+      maxPriorityFeePerGas: null,
+      maxFeePerGas: null,
       allowUnlimitedContractSize: true
     }
   },
