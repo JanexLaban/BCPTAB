@@ -1,15 +1,16 @@
 const hre = require("hardhat");
 const { ethers } = require("hardhat");
-const chalk = require("chalk"); // Add this to your package.json if not present
+const chalk = require("chalk");
 
 // Configuration - replace with your deployed contract address
-const ARBITRAGE_ADDRESS = "0x1bddf2572d7084cc9e13f101b6a4f8d6694e2e0c2cddf41ef11d15c01669c34c";
+const ARBITRAGE_ADDRESS = "YOUR_DEPLOYED_CONTRACT_ADDRESS";
 const TOKENS = {
     "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599": "WBTC",
     "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2": "WETH",
     "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48": "USDC"
 };
 
+// Format amount based on token decimals
 const formatAmount = (amount, token) => {
     const decimals = {
         "WBTC": 8,
@@ -47,8 +48,8 @@ async function monitorArbitrage() {
         console.log(`Router: ${router}`);
         console.log(`Token In: ${TOKENS[tokenIn] || tokenIn}`);
         console.log(`Token Out: ${TOKENS[tokenOut] || tokenOut}`);
-        console.log(`Amount In: ${ethers.formatEther(amountIn)} ETH`);
-        console.log(`Amount Out: ${ethers.formatEther(amountOut)} ETH`);
+        console.log(`Amount In: ${formatAmount(amountIn, tokenIn)}`);
+        console.log(`Amount Out: ${formatAmount(amountOut, tokenOut)}`);
         console.log(`Time: ${new Date(Number(timestamp) * 1000).toLocaleString()}`);
     });
 
@@ -57,7 +58,7 @@ async function monitorArbitrage() {
         (profit, gasUsed, successful, timestamp) => {
         if (successful) {
             console.log(chalk.green("\n✅ Arbitrage Completed Successfully:"));
-            console.log(`Profit: ${ethers.formatEther(profit)} ETH`);
+            console.log(`Profit: ${formatAmount(profit, "WETH")}`);
         } else {
             console.log(chalk.red("\n❌ Arbitrage Failed:"));
         }
@@ -70,7 +71,7 @@ async function monitorArbitrage() {
         (token, expectedProfit, timestamp) => {
         console.log(chalk.cyan("\n🎯 Opportunity Found:"));
         console.log(`Token: ${TOKENS[token] || token}`);
-        console.log(`Expected Profit: ${ethers.formatEther(expectedProfit)} ETH`);
+        console.log(`Expected Profit: ${formatAmount(expectedProfit, token)}`);
         console.log(`Time: ${new Date(Number(timestamp) * 1000).toLocaleString()}`);
     });
 
@@ -79,8 +80,8 @@ async function monitorArbitrage() {
         (token, expectedProfit, requiredProfit, timestamp) => {
         console.log(chalk.yellow("\n⚠️ Opportunity Below Threshold:"));
         console.log(`Token: ${TOKENS[token] || token}`);
-        console.log(`Expected Profit: ${ethers.formatEther(expectedProfit)} ETH`);
-        console.log(`Required Profit: ${ethers.formatEther(requiredProfit)} ETH`);
+        console.log(`Expected Profit: ${formatAmount(expectedProfit, token)}`);
+        console.log(`Required Profit: ${formatAmount(requiredProfit, token)}`);
         console.log(`Time: ${new Date(Number(timestamp) * 1000).toLocaleString()}`);
     });
 
@@ -107,9 +108,29 @@ function printStats([isSearching, lastSearchTimestamp, totalFlashLoans, successf
         ((successfulSwaps / (successfulSwaps + failedSwaps)) * 100).toFixed(2) : 0}%`);
 }
 
-// Add error handling for the main monitoring function
-async function startMonitoring() {
+async function testConnection() {
     try {
+        const arbitrage = await ethers.getContractAt("Arbitrage", ARBITRAGE_ADDRESS);
+        const stats = await arbitrage.getStats();
+        console.log("Connection test successful:", stats);
+        return true;
+    } catch (error) {
+        console.error(chalk.red("Connection test failed:", error.message));
+        return false;
+    }
+}
+
+// Main function to run everything
+async function main() {
+    try {
+        // Test connection first
+        const isConnected = await testConnection();
+        if (!isConnected) {
+            console.error(chalk.red("Failed to connect to the contract. Please check your configuration."));
+            process.exit(1);
+        }
+        
+        // Start monitoring
         await monitorArbitrage();
         console.log(chalk.green("Monitoring started successfully"));
     } catch (error) {
@@ -118,19 +139,10 @@ async function startMonitoring() {
     }
 }
 
-// Add these to your package.json if not present:
-// "dependencies": {
-//   "chalk": "^4.1.2"
-// }
-
-// Run the monitor
-startMonitoring().catch(console.error);
-// Add this function at the bottom of your monitor.js
-async function testConnection() {
-    const arbitrage = await ethers.getContractAt("Arbitrage", ARBITRAGE_ADDRESS);
-    const stats = await arbitrage.getStats();
-    console.log("Connection test successful:", stats);
+// Run the script
+if (require.main === module) {
+    main().catch((error) => {
+        console.error(error);
+        process.exit(1);
+    });
 }
-
-// Run this before starting the monitor
-await testConnection();
