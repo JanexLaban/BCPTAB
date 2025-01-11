@@ -2,8 +2,6 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
 contract ArbitrageMonitoring is ReentrancyGuard {
     // Structs to store trade information
     struct Trade {

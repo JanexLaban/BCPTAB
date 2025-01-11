@@ -13,7 +13,6 @@ if (!process.env.SEPOLIA_RPC_URL) {
   console.error("⚠️ Sepolia RPC URL not found in .env file");
 }
 
-
 module.exports = {
   solidity: {
     version: "0.8.20",
@@ -29,13 +28,17 @@ module.exports = {
       url: SEPOLIA_RPC_URL,
       accounts: [PRIVATE_KEY],
       gasPrice: "auto",
-      hainId: 11155111, // Adding explicit chainId for Sepolia
-      timeout: 20000,   // Increasing timeout
+      chainId: 11155111, // Fixed typo in chainId (was 'hainId')
+      timeout: 20000,
       gas: 3000000,
       maxPriorityFeePerGas: null,
       maxFeePerGas: null,
       allowUnlimitedContractSize: true
     }
+  },
+  // Moved etherscan config here as a top-level property
+  etherscan: {
+    apiKey: process.env.ETHERSCAN_API_KEY
   },
   paths: {
     sources: "./contracts",
